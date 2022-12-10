@@ -27,16 +27,19 @@ async function run(): Promise<void> {
     const bundleIdentifier = core.getInput('bundleIdentifier')
 
     let tagName = core.getInput('tagName').replace('refs/tags/', '')
+    let releaseId = Number(core.getInput('releaseId'))
     let releaseName = core.getInput('releaseName').replace('refs/tags/', '')
     let body = core.getInput('releaseBody')
     const draft = core.getBooleanInput('releaseDraft')
     const prerelease = core.getBooleanInput('prerelease')
     const commitish = core.getInput('releaseCommitish') || null
 
-    if (Boolean(tagName) !== Boolean(releaseName)) {
-      throw new Error(
-        '`tag` is required along with `releaseName` when creating a release.'
-      )
+    if (!releaseName) {
+      if (Boolean(tagName) !== Boolean(releaseName)) {
+        throw new Error(
+          '`tag` is required along with `releaseName` when creating a release.'
+        )
+      }
     }
 
     const options: BuildOptions = {
@@ -60,8 +63,7 @@ async function run(): Promise<void> {
 
     console.log(`Artifacts: ${artifacts.map(a => a.path)}.`)
 
-    let releaseId: number
-    if (tagName) {
+    if (tagName && !releaseId) {
       const packageJson = getPackageJson(projectPath)
       const templates = [
         {
@@ -89,9 +91,7 @@ async function run(): Promise<void> {
       core.setOutput('releaseUploadUrl', releaseData.uploadUrl)
       core.setOutput('releaseId', releaseData.id.toString())
       core.setOutput('releaseHtmlUrl', releaseData.htmlUrl)
-    } else {
-      releaseId = Number(core.getInput('releaseId') || 0)
-    }
+    } 
 
     if (releaseId) {
       if (platform() === 'darwin') {
@@ -110,7 +110,7 @@ async function run(): Promise<void> {
         }
       }
       await uploadReleaseAssets(releaseId, artifacts)
-      await uploadVersionJSON({ version: info.version, notes: body, releaseId, artifacts });
+      await uploadVersionJSON({ version: info.version, tagName, notes: body, releaseId, artifacts });
     }
   } catch (error) {
     core.setFailed(error.message)

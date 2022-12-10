@@ -11,8 +11,6 @@ export default async function uploadAssets(
     throw new Error('GITHUB_TOKEN is required')
   }
 
-
-
   const github = getOctokit(process.env.GITHUB_TOKEN)
 
   const existingAssets = (

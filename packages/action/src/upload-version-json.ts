@@ -10,11 +10,13 @@ import { Artifact } from "@tauri-apps/action-core";
 export default async function uploadVersionJSON({
   version,
   notes,
+  tagName,
   releaseId,
   artifacts,
 }: {
   version: string;
   notes: string;
+  tagName: string;
   releaseId: number;
   artifacts: Artifact[];
 }) {
@@ -37,12 +39,27 @@ export default async function uploadVersionJSON({
     owner: context.repo.owner,
     repo: context.repo.repo,
     release_id: releaseId,
+    per_page: 50,
   });
   const asset = assets.data.find((e) => e.name === versionFilename);
 
   if (asset) {
-    versionContent.platforms = (
-      (await (await fetch(asset.browser_download_url)).json()) as any
+    const assetData = (
+      await github.request(
+        'GET /repos/{owner}/{repo}/releases/assets/{asset_id}',
+        {
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          asset_id: asset.id,
+          headers: {
+            accept: 'application/octet-stream',
+          },
+        }
+      )
+    ).data as any as ArrayBuffer;
+
+    versionContent.platforms = JSON.parse(
+      Buffer.from(assetData).toString()
     ).platforms;
 
     // https://docs.github.com/en/rest/releases/assets#update-a-release-asset
@@ -56,11 +73,17 @@ export default async function uploadVersionJSON({
 
   const sigFile = artifacts.find((s) => s.path.endsWith(".sig"));
   const assetNames = new Set(artifacts.map((p) => getAssetName(p.path)));
-  const downloadUrl = assets.data
+  let downloadUrl = assets.data
     .filter((e) => assetNames.has(e.name))
     .find(
       (s) => s.name.endsWith(".tar.gz") || s.name.endsWith(".zip")
     )?.browser_download_url;
+
+  // Untagged release downloads won't work after the release was published
+  downloadUrl = downloadUrl?.replace(
+    /\/download\/(untagged-[^\/]+)\//,
+    tagName ? `/download/${tagName}/` : '/latest/download/'
+  );
 
   let os = platform() as string;
   if (os === "win32") os = "windows";
